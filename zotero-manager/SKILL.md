@@ -95,17 +95,26 @@ When given a directory of paper-summarizer-v2 output files:
 
 Notes are Zotero child items (`itemType: "note"`) attached to a parent item. Notes support HTML content — plain text and Markdown are stored as-is and rendered in the Zotero UI.
 
+**Note format — critical for proper rendering:**
+Zotero notes are stored as rich text (HTML, rendered by ProseMirror). BetterNotes supports Markdown syncing via file export/import, but notes POSTed via API must be **HTML**, not raw Markdown. If you POST raw Markdown, line breaks and formatting are lost.
+
+**Always convert Markdown to HTML before posting a note.** Use the bundled converter:
+```bash
+python3 <skill-directory>/scripts/md2html.py < input.md > note.html
+```
+
 **Add a note:**
 ```
-mcp__zotero__add_item_note(parent_item="<ITEM_KEY>", note="<CONTENT>", tags=["<optional-tags>"])
+mcp__zotero__add_item_note(parent_item="<ITEM_KEY>", note="<HTML_CONTENT>", tags=["<optional-tags>"])
 ```
 
 **Fallback via curl** (if `add_item_note` MCP tool is unavailable):
 ```bash
+NOTE_HTML=$(python3 <skill-dir>/scripts/md2html.py summary.md)
 curl -s -X POST "https://api.zotero.org/users/<USER_ID>/items" \
   -H "Zotero-API-Key: <API_KEY>" \
   -H "Content-Type: application/json" \
-  -d "$(python3 -c "import json; print(json.dumps([{'itemType':'note','note':open('note.md').read(),'parentItem':'<KEY>','tags':[{'tag':'t1'}]}]))")"
+  -d "$(python3 -c "import sys,json; print(json.dumps([{'itemType':'note','note':sys.argv[1],'parentItem':'<KEY>','tags':[{'tag':'t1'}]}]))" "$NOTE_HTML")"
 ```
 
 **Update a note:**
@@ -159,17 +168,25 @@ This only deletes the collection, not the items inside it.
 ```bash
 curl -s -X POST "https://api.zotero.org/users/<USER_ID>/collections/<COLLECTION_KEY>/items" \
   -H "Zotero-API-Key: <API_KEY>" \
-  -H "Content-Type: application/json" \
-  -d '["<ITEM_KEY_1>","<ITEM_KEY_2>"]'
+  -H "Content-Type: text/plain" \
+  -d "<ITEM_KEY>"
 ```
+The body is the **raw item key as plain text**, one per call. Do NOT JSON-encode — Zotero rejects JSON arrays with HTTP 400. To add multiple items, loop and POST each item key separately. Returns HTTP 204 on success.
 
 **Remove items from a collection:**
 ```bash
 curl -s -X DELETE "https://api.zotero.org/users/<USER_ID>/collections/<COLLECTION_KEY>/items" \
   -H "Zotero-API-Key: <API_KEY>" \
-  -H "Content-Type: application/json" \
-  -d '["<ITEM_KEY_1>"]'
+  -H "Content-Type: text/plain" \
+  -d "<ITEM_KEY>"
 ```
+
+**Verify items in a collection:**
+```bash
+curl -s "https://api.zotero.org/users/<USER_ID>/collections/<COLLECTION_KEY>/items/top?limit=50" \
+  -H "Zotero-API-Key: <API_KEY>"
+```
+Use `/items/top` (not `/items`) to get top-level items excluding child notes/attachments. Always verify after batch categorization to confirm all items landed in the expected collections.
 
 **Auto-categorize papers:**
 When importing or organizing, match paper topics to existing collections by keyword. The mapping is domain-adaptive — fetch the user's current collection tree, then match against collection names and paper content:
@@ -179,6 +196,7 @@ When importing or organizing, match paper topics to existing collections by keyw
 3. Papers with strong matches (collection name appears in title/abstract, or paper keywords match collection name) → add to that collection
 4. Papers with no clear match → leave uncategorized (user can organize later)
 5. Always report the categorization decisions so the user can review
+6. **Mandatory verification**: After categorizing, spot-check 2-3 collections with `GET /collections/<KEY>/items/top` to confirm items appear. Report any mismatches.
 
 **Do NOT hardcode collection keys** — they differ between Zotero accounts. Always fetch fresh and match by name.
 
