@@ -1,0 +1,46 @@
+{
+  "skill_name": "paper-summarizer-v2",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "总结这篇论文：https://www.nature.com/articles/s41586-019-0879-y",
+      "expected_output": "A structured markdown summary with: one-sentence summary, research motivation, innovations (≤3), method description, key results with quantitative data, and limitations. In Chinese.",
+      "files": [],
+      "assertions": [
+        {"id": "output_file_exists", "text": "至少生成一个 .md 输出文件", "type": "file_check"},
+        {"id": "has_one_sentence_summary", "text": "包含「一句话总结」部分", "type": "contains"},
+        {"id": "has_motivation", "text": "包含「研究动机」部分", "type": "contains"},
+        {"id": "has_innovations", "text": "包含「创新点」部分且不超过3条", "type": "regex"},
+        {"id": "has_method", "text": "包含「方法」部分且有实质内容", "type": "contains"},
+        {"id": "has_results", "text": "包含「结果」部分且有定量数据", "type": "regex"},
+        {"id": "has_limitations", "text": "包含「缺点」部分", "type": "contains"},
+        {"id": "chinese_language", "text": "主要内容为中文", "type": "script"},
+        {"id": "paper_specific", "text": "内容针对指定论文而非通用模板", "type": "script"}
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "帮我总结这三篇论文：10.1016/j.cell.2019.11.003, arXiv:2103.14030, PMC7158953",
+      "expected_output": "Three individual paper summaries, each following the template format, or a comparative analysis if user selects that mode.",
+      "files": [],
+      "assertions": [
+        {"id": "three_papers_covered", "text": "覆盖了全部三篇论文", "type": "script"},
+        {"id": "each_has_template", "text": "每篇论文总结遵循模板格式", "type": "script"},
+        {"id": "doi_resolved", "text": "DOI/arXiv ID 被正确解析", "type": "script"},
+        {"id": "output_files_exist", "text": "生成了输出文件", "type": "file_check"}
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "文献调研：B细胞受体进化树相关最新顶会文章",
+      "expected_output": "A survey of recent top conference papers on B cell receptor phylogeny/evolution trees, with summaries of multiple papers.",
+      "files": [],
+      "assertions": [
+        {"id": "output_file_exists", "text": "生成了文献调研输出文件", "type": "file_check"},
+        {"id": "bcr_topic", "text": "内容涉及 B 细胞受体或抗体进化树", "type": "script"},
+        {"id": "multiple_papers", "text": "覆盖了多篇论文（至少2-3篇）", "type": "script"},
+        {"id": "conference_venues", "text": "提到了会议/期刊来源信息", "type": "contains"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+name: Release — npm publish & skill zips
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v1.1.0). Creates the release if it doesn't exist."
+        required: true
+
+permissions:
+  contents: write   # needed to upload release assets
+
+jobs:
+  # ── 1. Run tests before publishing anything ──────────────────
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+
+  # ── 2. Publish to npm ───────────────────────────────────────
+  npm-publish:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ── 3. Generate skill zips and attach to the release ────────
+  skill-zips:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create skill zip archives
+        run: |
+          mkdir -p dist-skills
+          for skill_dir in skills/*/; do
+            skill_name=$(basename "$skill_dir")
+            (cd skills && zip -r "../dist-skills/${skill_name}.zip" "$skill_name")
+          done
+          ls -lh dist-skills/
+
+      - name: Resolve or create release
+        id: tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          # Create the release if it doesn't exist yet
+          if ! gh release view "$TAG" > /dev/null 2>&1; then
+            gh release create "$TAG" --title "$TAG" --generate-notes
+          fi
+          echo "name=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Upload zips to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for zip_file in dist-skills/*.zip; do
+            gh release upload "${{ steps.tag.outputs.name }}" "$zip_file" --clobber
+          done
